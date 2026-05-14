@@ -16,7 +16,10 @@ export default function DriverDashboard() {
   const [secsLeft, setSecsLeft] = useState(0);
   const qc = useQueryClient();
 
-  const { offer, connected, respondToOffer, updateLocation } = useDriverSocket((trip) => {
+  const { data: profile } = useQuery({ queryKey: ['driver', 'profile'], queryFn: driverApi.getProfile });
+  const isOnline = profile?.status === 'AVAILABLE' || profile?.status === 'ON_TRIP';
+
+  const { offer, connected, respondToOffer, updateLocation } = useDriverSocket(isOnline, (trip) => {
     qc.setQueryData(['driver', 'active-trip'], trip);
     setTab('active-trip');
   });
@@ -33,8 +36,10 @@ export default function DriverDashboard() {
     <div className="max-w-4xl mx-auto p-6">
       {/* Socket connection status */}
       <div className="flex items-center gap-2 mb-4">
-        <span className={`w-2 h-2 rounded-full ${connected ? 'bg-green-500' : 'bg-gray-400'}`} />
-        <span className="text-xs text-gray-500">{connected ? 'Live — receiving ride offers' : 'Connecting...'}</span>
+        <span className={`w-2 h-2 rounded-full ${!isOnline ? 'bg-gray-400' : connected ? 'bg-green-500' : 'bg-yellow-400'}`} />
+        <span className="text-xs text-gray-500">
+          {!isOnline ? 'Offline' : connected ? 'Live — receiving ride offers' : 'Connecting...'}
+        </span>
       </div>
 
       {/* Ride offer banner — appears on top regardless of active tab */}

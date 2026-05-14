@@ -46,7 +46,7 @@ export interface RideOffer {
   expiresAt: number;  // epoch ms
 }
 
-export function useDriverSocket(onTripAssigned: (trip: Trip) => void) {
+export function useDriverSocket(isOnline: boolean, onTripAssigned: (trip: Trip) => void) {
   const socketRef = useRef<Socket | null>(null);
   const tripAssignedCbRef = useRef(onTripAssigned);
   tripAssignedCbRef.current = onTripAssigned;
@@ -70,6 +70,13 @@ export function useDriverSocket(onTripAssigned: (trip: Trip) => void) {
   }, [stopRinging]);
 
   useEffect(() => {
+    if (!isOnline) {
+      setConnected(false);
+      setOffer(null);
+      stopRinging();
+      return;
+    }
+
     const socket = io(`${BASE_URL}/driver`, {
       withCredentials: true,
     });
@@ -99,8 +106,9 @@ export function useDriverSocket(onTripAssigned: (trip: Trip) => void) {
     return () => {
       socket.disconnect();
       socketRef.current = null;
+      setConnected(false);
     };
-  }, [startRinging, stopRinging]);
+  }, [isOnline, startRinging, stopRinging]);
 
   // Auto-dismiss offer when it expires — also stops the ring
   useEffect(() => {

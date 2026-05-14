@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { type InternalAxiosRequestConfig } from 'axios';
 
 export const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_URL as string,
@@ -14,6 +14,21 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
+let isRefreshing = false;
+let refreshQueue: Array<(retry: boolean) => void> = [];
+
+function flushQueue(retry: boolean) {
+  refreshQueue.forEach((resolve) => resolve(retry));
+  refreshQueue = [];
+}
+
+function logout() {
+  localStorage.removeItem('authUser');
+  localStorage.removeItem('tenantId');
+  localStorage.removeItem('regionId');
+  window.location.href = '/login';
+}
+
 apiClient.interceptors.response.use(
   (res) => {
     // Backend wraps all responses as { data: <payload> } — unwrap transparently
@@ -22,14 +37,43 @@ apiClient.interceptors.response.use(
     }
     return res;
   },
-  (err: unknown) => {
-    const status = (err as { response?: { status?: number } }).response?.status;
-    if (status === 401) {
-      localStorage.removeItem('authUser');
-      localStorage.removeItem('tenantId');
-      localStorage.removeItem('regionId');
-      window.location.href = '/login';
+  async (err: unknown) => {
+    const axiosErr = err as { response?: { status?: number }; config?: InternalAxiosRequestConfig & { _retried?: boolean } };
+    const status = axiosErr.response?.status;
+    const config = axiosErr.config;
+
+    // Don't retry the refresh call itself — avoids infinite loop
+    if (status !== 401 || !config || config._retried) {
+      return Promise.reject(err as Error);
     }
-    return Promise.reject(err as Error);
+
+    if (isRefreshing) {
+      // Another request already triggered refresh — queue this one
+      return new Promise((resolve, reject) => {
+        refreshQueue.push((retry) => {
+          if (retry) resolve(apiClient(config));
+          else reject(err as Error);
+        });
+      });
+    }
+
+    config._retried = true;
+    isRefreshing = true;
+
+    try {
+      await axios.post(
+        `${import.meta.env.VITE_API_URL as string}/auth/refresh`,
+        {},
+        { withCredentials: true },
+      );
+      flushQueue(true);
+      return apiClient(config);
+    } catch {
+      flushQueue(false);
+      logout();
+      return Promise.reject(err as Error);
+    } finally {
+      isRefreshing = false;
+    }
   },
 );
