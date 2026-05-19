@@ -19,10 +19,18 @@ export default function DriverDashboard() {
   const { data: profile } = useQuery({ queryKey: ['driver', 'profile'], queryFn: driverApi.getProfile });
   const isOnline = profile?.status === 'AVAILABLE' || profile?.status === 'ON_TRIP';
 
-  const { offer, connected, respondToOffer, updateLocation } = useDriverSocket(isOnline, (trip) => {
-    qc.setQueryData(['driver', 'active-trip'], trip);
-    setTab('active-trip');
-  });
+  const { offer, connected, respondToOffer, updateLocation } = useDriverSocket(
+    isOnline,
+    (trip) => {
+      qc.setQueryData(['driver', 'active-trip'], trip);
+      setTab('active-trip');
+    },
+    () => {
+      qc.setQueryData(['driver', 'active-trip'], undefined);
+      void qc.invalidateQueries({ queryKey: ['driver', 'profile'] });
+      setTab('profile');
+    },
+  );
 
   useEffect(() => {
     if (!offer) return;

@@ -46,10 +46,12 @@ export interface RideOffer {
   expiresAt: number;  // epoch ms
 }
 
-export function useDriverSocket(isOnline: boolean, onTripAssigned: (trip: Trip) => void) {
+export function useDriverSocket(isOnline: boolean, onTripAssigned: (trip: Trip) => void, onTripCancelled: () => void) {
   const socketRef = useRef<Socket | null>(null);
   const tripAssignedCbRef = useRef(onTripAssigned);
   tripAssignedCbRef.current = onTripAssigned;
+  const tripCancelledCbRef = useRef(onTripCancelled);
+  tripCancelledCbRef.current = onTripCancelled;
 
   const soundIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -97,6 +99,16 @@ export function useDriverSocket(isOnline: boolean, onTripAssigned: (trip: Trip) 
       stopRinging();
       setOffer(null);
       tripAssignedCbRef.current(trip);
+    });
+
+    socket.on('trip:cancelled', () => {
+      tripCancelledCbRef.current();
+    });
+
+    // Rider cancelled while this driver was being offered the ride
+    socket.on('offer:cancelled', () => {
+      stopRinging();
+      setOffer(null);
     });
 
     socket.on('connect_error', (err) => {
